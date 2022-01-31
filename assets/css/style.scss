@@ -1,0 +1,40 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+.wrapper {
+	max-width: 1400px;
+}
+
+section {
+	max-width: 1400px;
+}
+
+nav {
+	max-width: 1400px !important;
+}
+
+h2 {
+	margin-top: 10px;
+}
+
+.no-top {
+	margin-top: 0;
+}
+
+.column {
+  float: left;
+  width: 30%;
+  padding: 1%;
+}
+
+.row::after {
+  content: "";
+  clear: both;
+  display: table;
+}
+
+.art {
+	width: 100%;
+}
