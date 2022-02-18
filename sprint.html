@@ -1,0 +1,321 @@
+---
+layout: null
+title: Graphics
+permalink: /graphics/
+filename: sprint.html
+---
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+			height: 100%;
+			
+			margin: 0;
+			overflow: hidden;
+			background-color: #AAAAAA;
+			background-attachment: fixed !important;
+			}
+		</style>
+		<style>
+			body {
+				font-family: Monospace;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+		<script id="vertShader" type="x-shader/x-vertex">
+			void main() {
+				gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+			}
+		</script>
+
+		<script id="fragShader" type="x-shader/x-fragment">
+			precision highp float;
+			uniform sampler2D image;
+
+			void main(void) {
+				vec4 textureValue = vec4 ( 0,0,0,0 );
+
+				textureValue += texelFetch( image, ivec2(gl_FragCoord.x, gl_FragCoord.y), 0 );
+
+				gl_FragColor = textureValue;
+			}
+		</script>
+
+		<script id="panelVertShader" type="x-shader/x-vertex">
+			varying vec2 vUv;
+			uniform float curveTerm;
+			uniform float segments;
+
+			void main() {
+				vUv = vec2( uv.x, 1.0-uv.y );
+				float x = curveTerm*sin ( position.x/curveTerm );
+				float z = curveTerm-curveTerm*cos ( position.x/curveTerm);
+				vec4 mvPosition = modelViewMatrix * vec4( x, position.y, z , 1.0 );
+				gl_Position = projectionMatrix * mvPosition;
+				if (curveTerm == 6.0) {
+					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+				}
+			}
+		</script>
+
+		<script id="panelFragShader" type="x-shader/x-fragment">
+			precision highp float;
+			varying vec2 vUv;
+			uniform sampler2D image;
+
+			void main(void) {
+				vec3 color = texture2D ( image, vUv ).rgb;
+				gl_FragColor.rgb = color;
+				gl_FragColor.a = 1.0;
+			}
+		</script>
+
+		<script type="x-shader/x-vertex" id="lightvertexshader">
+			uniform float scaleElevation; 
+			uniform float segments;
+			uniform vec3 lightDir;
+			uniform float lightIntensity;
+			uniform sampler2D tex;
+			uniform float shadingSteps;
+			varying vec2 vUv;
+			varying float NdotL;
+			uniform float factor;
+		
+			float len ( vec4 color )
+			{
+				return length ( color.rgb );
+			} 
+
+			void main() {
+				vUv = uv;
+				float l = len ( texture2D ( tex, vUv ) );
+				vec3 tmp = position;
+				tmp.z = tmp.z - l*scaleElevation;
+				float segmentUvStepX = 1.0 / segments;
+				float segmentUvStepY = 1.0 / (segments * factor);
+				float diffX = 0.0;
+				float diffY = 0.0;
+
+				NdotL = 0.0;
+
+				for (float i = -shadingSteps; i < shadingSteps + 1.0; i++) {
+					for (float j = -shadingSteps; j < shadingSteps + 1.0; j++) {
+						diffX += abs(len(texture2D (tex, vUv+vec2 (segmentUvStepX * i,0.0 ) )) - len(texture2D (tex, vUv ) ));
+						diffY += abs(len(texture2D (tex, vUv+vec2 (0.0,segmentUvStepY * j ) )) - len(texture2D (tex, vUv ) ));
+						vec3 normal = normalize(cross ( vec3 ( 1.0, 0.0, diffX ),
+					                            vec3 ( 0.0, 1.0, diffY ) ) );
+		  				NdotL += lightIntensity*(dot(normal, lightDir));
+					}
+				}
+
+				float cells = (shadingSteps * 2.0 + 1.0) * (shadingSteps * 2.0 + 1.0);
+
+				NdotL /= cells;
+
+				gl_Position = projectionMatrix * modelViewMatrix * vec4(tmp, 1.0);
+				
+				if (false) {
+				// if (cells == 9.0) {
+				// if (shadingSteps == 1.0) {
+					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+				}
+			}
+		</script>
+
+		<script type="x-shader/x-fragment" id="lightfragmentshader">
+			varying vec2 vUv;
+			varying float NdotL;
+
+			uniform sampler2D tex;
+
+			void main() {
+				vec3 color = texture2D ( tex, vUv ).rgb;
+				gl_FragColor.rgb = vec3(NdotL)*color;
+				gl_FragColor.a = 1.0;
+			}
+		</script>
+
+		<script type="x-shader/x-vertex" id="RGBVertexShader">
+			uniform sampler2D tex;
+			varying vec3 color;
+			uniform bool hsv;
+			uniform bool hsl;
+			uniform bool ycbcr;
+			uniform bool xyz;
+			uniform bool lab;
+			uniform bool srgb;
+	
+			vec3 rgb2hsv(vec3 c) {
+				float cMax=max(max(c.r,c.g),c.b),
+					  cMin=min(min(c.r,c.g),c.b),
+					  delta=cMax-cMin;
+				vec3 hsv=vec3(0.,0.,cMax);
+				if(cMax>cMin){
+					hsv.y=delta/cMax;
+					if(c.r==cMax){
+						hsv.x=(c.g-c.b)/delta;
+					}else if(c.g==cMax){
+						hsv.x=2.+(c.b-c.r)/delta;
+					}else{
+						hsv.x=4.+(c.r-c.g)/delta;
+					}
+					hsv.x=fract(hsv.x/6.);
+				}
+				return hsv;
+			}
+	
+			vec3 rgb2hsl(vec3 c){
+				float cMin=min(min(c.r,c.g),c.b),
+					  cMax=max(max(c.r,c.g),c.b),
+					  delta=cMax-cMin;
+				vec3 hsl=vec3(0.,0.,(cMax+cMin)/2.);
+				if(delta!=0.0){ //If it has chroma and isn't gray.
+					if(hsl.z<.5){
+						hsl.y=delta/(cMax+cMin); //Saturation.
+					}else{
+						hsl.y=delta/(2.-cMax-cMin); //Saturation.
+					}
+					float deltaR=(((cMax-c.r)/6.)+(delta/2.))/delta,
+						  deltaG=(((cMax-c.g)/6.)+(delta/2.))/delta,
+						  deltaB=(((cMax-c.b)/6.)+(delta/2.))/delta;
+					//Hue.
+					if(c.r==cMax){
+						hsl.x=deltaB-deltaG;
+					}else if(c.g==cMax){
+						hsl.x=(1./3.)+deltaR-deltaB;
+					}else{ //if(c.b==cMax){
+						hsl.x=(2./3.)+deltaG-deltaR;
+					}
+					hsl.x=fract(hsl.x);
+				}
+				return hsl;
+			}
+	
+			vec3 rgb2ycbcr(vec3 c){
+				float y=.299*c.r+.587*c.g+.114*c.b;
+				return vec3(y,(c.b-y)*.565,(c.r-y)*.713);
+			}
+	
+			vec3 rgb2xyz(vec3 c){
+				vec3 tmp=vec3(
+					(c.r>.04045)?pow((c.r+.055)/1.055,2.4):c.r/12.92,
+					(c.g>.04045)?pow((c.g+.055)/1.055,2.4):c.g/12.92,
+					(c.b>.04045)?pow((c.b+.055)/1.055,2.4):c.b/12.92
+				);
+				mat3 mat=mat3(
+					.4124,.3576,.1805,
+					.2126,.7152,.0722,
+					.0193,.1192,.9505
+				);
+				return 100.*(tmp*mat);
+			}
+	
+			vec3 xyz2lab(vec3 c){
+				vec3 n=c/vec3(95.047,100.,108.883),
+					 v=vec3(
+					(n.x>.008856)?pow(n.x,1./3.):(7.787*n.x)+(16./116.),
+					(n.y>.008856)?pow(n.y,1./3.):(7.787*n.y)+(16./116.),
+					(n.z>.008856)?pow(n.z,1./3.):(7.787*n.z)+(16./116.)
+				);
+				return vec3((116.*v.y)-16.,500.*(v.x-v.y),200.*(v.y-v.z));
+			}
+	
+			vec3 rgb2lab(vec3 c){
+				vec3 lab=xyz2lab(rgb2xyz(c));
+				return vec3(lab.x/100.,.5+.5*(lab.y/127.),.5+.5*(lab.z/127.));
+			}
+	
+			const float SRGB_ALPHA=.055;
+			float linear2srgb(float x){
+				if(x<=.0031308){
+					return 12.92*x;
+				}else{
+					return(1.+SRGB_ALPHA)*pow(x,1./2.4)-SRGB_ALPHA;
+				}
+			}
+	
+			vec3 rgb2srgb(vec3 c){
+				return vec3(
+					linear2srgb(c.r),
+					linear2srgb(c.g),
+					linear2srgb(c.b)
+				);
+			}
+	
+			void main() {
+				color = texture2D ( tex, position.xy ).rgb;
+				gl_PointSize = 1.0;
+
+				if (hsv)
+				{
+					color = rgb2hsv(color);
+				}
+				else if (hsl)
+				{
+					color = rgb2hsl(color);
+				}
+				else if (ycbcr)
+				{
+					color = rgb2ycbcr(color);
+				}
+				else if (xyz)
+				{
+					color = rgb2xyz(color);
+				}
+				else if (lab)
+				{
+					color = rgb2lab(color);
+				}
+				else if (srgb)
+				{
+					color = rgb2srgb(color);
+				}
+				
+				gl_Position = projectionMatrix * modelViewMatrix * vec4(color-vec3(.5,.5,.5), 1.0);
+			}
+		</script>
+	
+		<script type="x-shader/x-fragment" id="RGBFragmentShader">
+			varying vec3 color;
+	
+			void main() {
+				gl_FragColor.rgb = color;
+				gl_FragColor.a = 1.0;
+			}
+		</script>
+
+		<script type="x-shader/x-vertex" id="PointShadowVertexShader">
+			uniform sampler2D tex;
+			varying vec3 color;
+			varying float y;
+	
+			void main() {
+				color = texture2D ( tex, position.xy ).rgb;
+				y = color.y / 3.0;
+				color.y = 0.001;
+				gl_PointSize = 1.0;
+				gl_Position = projectionMatrix * modelViewMatrix * vec4(color-vec3(.5,.5,.5), 1.0);
+			}
+		</script>
+	
+		<script type="x-shader/x-fragment" id="PointShadowFragmentShader">
+			varying vec3 color;
+			varying float y;
+	
+			void main() {
+				gl_FragColor.rgb = vec3(y, y, y);
+				gl_FragColor.a = 1.0;
+			}
+		</script>
+	<script type="module" src="/assets/sprint.js"></script>
+	</body>
+</html>
